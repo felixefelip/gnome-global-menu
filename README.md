@@ -1,74 +1,80 @@
 # GNOME Global Menu
 
-Menu global no estilo macOS para o GNOME Shell 50 (Wayland). Mostra a barra de
-menus da janela em foco no lado esquerdo do painel superior.
+macOS-style global menu for GNOME Shell 50 (Wayland). Shows the menu bar of
+the focused window on the left side of the top panel.
 
-## Como funciona
+## How it works
 
-- `src/registrar.ts`: implementa `com.canonical.AppMenu.Registrar`, onde Qt,
-  Electron, Chromium, Firefox e LibreOffice registram seus menus (DBusMenu).
-  A janela é associada pelo ID X11 (XWayland) ou, em último caso, pelo PID.
-- `src/sources/gtkMenuSource.ts`: lê menus GTK (`org.gtk.Menus`) usando os
-  caminhos que o Mutter expõe para cada janela. Apps GTK4/libadwaita não
-  exportam o menu hambúrguer, só as ações dele (`org.gtk.Actions`); para eles
-  os menus são montados a partir dessas ações.
-- `src/sources/gtkActionMenus.ts`: nomes de ação comuns nos apps GNOME
-  (`app.about`, `win.undo`, …) e o menu e rótulo de cada um.
-- `src/sources/dbusMenuSource.ts`: cliente do protocolo `com.canonical.dbusmenu`.
-- `src/sources/desktopMenuSource.ts`: menu mostrado quando a área de trabalho
-  está em foco (como o Finder no macOS): app Arquivos e menus Go (pastas),
-  Preferences (painéis do Configurações) e Help.
-- `src/menuBar.ts`: desenha os menus no painel.
-- `src/extension.ts`: acompanha a janela em foco e escolhe a fonte do menu.
+- `src/registrar.ts`: implements `com.canonical.AppMenu.Registrar`, where Qt,
+  Electron, Chromium, Firefox and LibreOffice register their menus (DBusMenu).
+  The window is matched by its X11 id (XWayland) or, as a last resort, by PID.
+- `src/sources/gtkMenuSource.ts`: reads GTK menus (`org.gtk.Menus`) using the
+  paths Mutter exposes for each window. GTK4/libadwaita apps don't export
+  their hamburger menu, only its actions (`org.gtk.Actions`); for them the
+  menus are built from those actions.
+- `src/sources/gtkActionMenus.ts`: action names common in GNOME apps
+  (`app.about`, `win.undo`, …) and the menu and label for each one.
+- `src/sources/dbusMenuSource.ts`: client for the `com.canonical.dbusmenu`
+  protocol.
+- `src/sources/desktopMenuSource.ts`: menu shown when the desktop has focus
+  (like Finder on macOS): the Files app and the Go (folders), Preferences
+  (Settings panels) and Help menus.
+- `src/menuBar.ts`: draws the menus in the panel.
+- `src/extension.ts`: follows the focused window and picks the menu source.
 
-## Desenvolvimento
+## Development
 
 ```sh
 npm install
-npm run check        # checagem de tipos
-npm run build        # gera build/
-npm run install-ext  # copia para ~/.local/share/gnome-shell/extensions
+npm run check        # type check
+npm run build        # builds into build/
+npm run install-ext  # copies to ~/.local/share/gnome-shell/extensions
 ```
 
-### Testar numa sessão aninhada (recomendado)
+### Testing in a nested session (recommended)
 
-Precisa do pacote `mutter-dev-bin` (`sudo apt install mutter-dev-bin`).
+Requires the `mutter-dev-bin` package (`sudo apt install mutter-dev-bin`).
 
 ```sh
 npm run install-ext
-npm run nested   # abre o GNOME numa janela e já ativa a extensão nele
+npm run nested   # opens GNOME in a window with the extension enabled
 ```
 
-Abra os apps de dentro da janela aninhada (pelo Activities dela). Os apps
-abertos fora dela continuam na sua sessão normal.
+Open apps from inside the nested window (through its Activities). Apps
+opened outside it stay in your regular session.
 
-Os apps precisam ser abertos **depois** de a extensão estar ativa, porque eles
-só procuram o Registrar ao iniciar.
+Apps must be opened **after** the extension is enabled, because they only
+look for the Registrar on startup.
 
-Logs: na sessão aninhada aparecem no terminal que rodou `npm run nested`; na sessão normal, use `journalctl -f -o cat /usr/bin/gnome-shell | grep global-menu`.
+Logs: in the nested session they show up in the terminal that ran
+`npm run nested`; in the regular session, use
+`journalctl -f -o cat /usr/bin/gnome-shell | grep global-menu`.
 
-### Chrome e VS Code em Wayland nativo
+### Chrome and VS Code on native Wayland
 
-No Wayland, o Chromium e o Electron só exportam o menu se o compositor tiver o
-protocolo `org_kde_kwin_appmenu`, que o Mutter não implementa. O fork
-[felixefelip/mutter](https://github.com/felixefelip/mutter) implementa esse
-protocolo e expõe o endereço do menu em `Meta.Window`
-(`dbus-appmenu-service-name` e `dbus-appmenu-object-path`). Sem o fork, a
-extensão funciona como antes.
+On Wayland, Chromium and Electron only export their menu if the compositor
+has the `org_kde_kwin_appmenu` protocol, which Mutter doesn't implement. The
+[felixefelip/mutter](https://github.com/felixefelip/mutter) fork implements
+this protocol and exposes the menu's address on `Meta.Window`
+(`dbus-appmenu-service-name` and `dbus-appmenu-object-path`). Without the
+fork, the extension works as before.
 
-- `kde-appmenu`: o patch sobre o Mutter oficial do GNOME.
-- `kde-appmenu-ubuntu`: o mesmo patch sobre o Mutter do Ubuntu, que é o que
-  roda com o gnome-shell instalado.
+- `kde-appmenu`: the patch on top of GNOME's official Mutter.
+- `kde-appmenu-ubuntu`: the same patch on top of Ubuntu's Mutter, which is
+  what runs with the installed gnome-shell.
+- `kde-appmenu-ubuntu-deb`: Ubuntu packaging with the patch, to build `.deb`
+  packages with `dpkg-buildpackage -b -us -uc`.
 
-Como cada app usa o protocolo:
+How each app uses the protocol:
 
-- Chrome: manda o endereço pelo protocolo, janela por janela.
-- VS Code/Electron: só confere se o protocolo existe e depois registra o
-  menu no Registrar com um ID que não é de X11. A janela é encontrada pelo
-  PID, então com várias janelas abertas pode aparecer o menu da janela errada.
+- Chrome: sends the address through the protocol, window by window.
+- VS Code/Electron: only checks that the protocol exists and then registers
+  the menu with the Registrar using an id that isn't an X11 one. The window
+  is found by PID, so with several windows open the wrong window's menu may
+  show up.
 
-Para testar na sessão aninhada sem instalar o fork (a versão do fork precisa
-ser a mesma do Mutter instalado):
+To test in the nested session without installing the fork (the fork's
+version must match the installed Mutter):
 
 ```sh
 git clone -b kde-appmenu-ubuntu https://github.com/felixefelip/mutter ~/workspaces/mutter
@@ -79,9 +85,9 @@ cd - && MUTTER_BUILD=~/workspaces/mutter/build npm run nested -- \
     google-chrome --ozone-platform=wayland
 ```
 
-O comando depois de `--` é aberto dentro da sessão aninhada.
+The command after `--` is started inside the nested session.
 
 ### Firefox
 
-Em `about:config`, ative `widget.gtk.global-menu.enabled`. Para o caminho via
-XWayland, inicie com `MOZ_ENABLE_WAYLAND=0 firefox`.
+In `about:config`, enable `widget.gtk.global-menu.enabled`. For the XWayland
+path, start it with `MOZ_ENABLE_WAYLAND=0 firefox`.
