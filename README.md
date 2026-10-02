@@ -12,7 +12,8 @@ menus da janela em foco no lado esquerdo do painel superior.
   caminhos que o Mutter expõe para cada janela.
 - `src/sources/dbusMenuSource.ts`: cliente do protocolo `com.canonical.dbusmenu`.
 - `src/sources/desktopMenuSource.ts`: menu mostrado quando a área de trabalho
-  está em foco (como o Finder no macOS): app Arquivos e menu Go com as pastas.
+  está em foco (como o Finder no macOS): app Arquivos e menus Go (pastas),
+  Preferences (painéis do Configurações) e Help.
 - `src/menuBar.ts`: desenha os menus no painel.
 - `src/extension.ts`: acompanha a janela em foco e escolhe a fonte do menu.
 
