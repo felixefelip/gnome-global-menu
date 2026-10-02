@@ -89,5 +89,9 @@ The command after `--` is started inside the nested session.
 
 ### Firefox
 
-In `about:config`, enable `widget.gtk.global-menu.enabled`. For the XWayland
-path, start it with `MOZ_ENABLE_WAYLAND=0 firefox`.
+In `about:config`, enable `widget.gtk.global-menu.enabled` and, on native
+Wayland, also `widget.gtk.global-menu.wayland.enabled`. With the second one,
+Firefox sends its menu's address over `org_kde_kwin_appmenu`, like Chrome, so
+it needs the Mutter fork described above. Without the fork, use the XWayland
+path instead: start it with `MOZ_ENABLE_WAYLAND=0 firefox` (only the first
+pref is needed then).
