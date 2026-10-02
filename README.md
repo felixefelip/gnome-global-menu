@@ -9,7 +9,11 @@ menus da janela em foco no lado esquerdo do painel superior.
   Electron, Chromium, Firefox e LibreOffice registram seus menus (DBusMenu).
   A janela é associada pelo ID X11 (XWayland) ou, em último caso, pelo PID.
 - `src/sources/gtkMenuSource.ts`: lê menus GTK (`org.gtk.Menus`) usando os
-  caminhos que o Mutter expõe para cada janela.
+  caminhos que o Mutter expõe para cada janela. Apps GTK4/libadwaita não
+  exportam o menu hambúrguer, só as ações dele (`org.gtk.Actions`); para eles
+  os menus são montados a partir dessas ações.
+- `src/sources/gtkActionMenus.ts`: nomes de ação comuns nos apps GNOME
+  (`app.about`, `win.undo`, …) e o menu e rótulo de cada um.
 - `src/sources/dbusMenuSource.ts`: cliente do protocolo `com.canonical.dbusmenu`.
 - `src/sources/desktopMenuSource.ts`: menu mostrado quando a área de trabalho
   está em foco (como o Finder no macOS): app Arquivos e menus Go (pastas),

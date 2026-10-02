@@ -101,7 +101,7 @@ export default class GlobalMenuExtension extends Extension {
             window,
         };
 
-        const found = this._findSource(window);
+        const found = this._findSource(window, focused.name);
         const current = this._menuBar!.source;
         if (found && current && found.key === current.key) {
             if (this._menuBar!.window !== window)
@@ -123,18 +123,20 @@ export default class GlobalMenuExtension extends Extension {
     }
 
     /** Looks for a menu on the window itself, then on the windows it is transient for. */
-    private _findSource(window: Meta.Window): {key: string, create: () => MenuSource} | null {
+    private _findSource(window: Meta.Window, appName: string): {key: string, create: () => MenuSource} | null {
         for (let w: Meta.Window | null = window; w; w = w.get_transient_for()) {
             const busName = w.get_gtk_unique_bus_name();
             const menubarPath = w.get_gtk_menubar_object_path();
-            if (busName && menubarPath) {
+            const applicationPath = w.get_gtk_application_object_path();
+            // Without a menu bar, the menus are built from the app's actions.
+            if (busName && (menubarPath || applicationPath)) {
                 const paths = {
                     busName,
                     menubarPath,
-                    applicationPath: w.get_gtk_application_object_path(),
+                    applicationPath,
                     windowPath: w.get_gtk_window_object_path(),
                 };
-                return {key: GtkMenuSource.keyFor(paths), create: () => new GtkMenuSource(paths)};
+                return {key: GtkMenuSource.keyFor(paths), create: () => new GtkMenuSource(paths, appName)};
             }
 
             const registration = this._registrar!.lookup(w);

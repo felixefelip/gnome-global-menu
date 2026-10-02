@@ -90,7 +90,7 @@ export class MenuBar {
             return;
 
         log(`showing ${nodes.length} menus for ${this._focused.name} (${source?.key ?? 'no menu'})`);
-        this._addAppButton(this._focused);
+        this._addAppButton(this._focused, source);
         for (const node of nodes) {
             if (node.visible && !node.separator)
                 this._addMenuButton(node, source!);
@@ -120,9 +120,19 @@ export class MenuBar {
         return button;
     }
 
-    private _addAppButton(focused: FocusedApp) {
+    private _addAppButton(focused: FocusedApp, source: MenuSource | null) {
         const button = this._addButton(focused.name, 'global-menu-app-name');
         const menu = button.menu as PopupMenu.PopupMenu;
+
+        const appItems = source?.getAppItems?.().filter(node => node.visible) ?? [];
+        if (appItems.length > 0) {
+            for (const node of appItems) {
+                menu.addMenuItem(node.separator
+                    ? new PopupMenu.PopupSeparatorMenuItem()
+                    : this._createItem(node, source!, false));
+            }
+            menu.addMenuItem(new PopupMenu.PopupSeparatorMenuItem());
+        }
 
         const window = focused.window;
         if (!window) {

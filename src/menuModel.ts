@@ -32,6 +32,8 @@ export interface MenuSource {
     closeSubmenu(node: MenuNode): void;
     activate(node: MenuNode): void;
     destroy(): void;
+    /** Extra items for the app-name menu, read after getTopLevel(). */
+    getAppItems?(): MenuNode[];
 }
 
 export function makeSeparator(id: string): MenuNode {
