@@ -1,6 +1,8 @@
 // Renders a MenuSource as a row of buttons in the left side of the top panel.
 
 import Clutter from 'gi://Clutter';
+import Gio from 'gi://Gio';
+import GLib from 'gi://GLib';
 import Meta from 'gi://Meta';
 import Shell from 'gi://Shell';
 import St from 'gi://St';
@@ -10,6 +12,7 @@ import * as PanelMenu from 'resource:///org/gnome/shell/ui/panelMenu.js';
 import * as PopupMenu from 'resource:///org/gnome/shell/ui/popupMenu.js';
 
 import {MenuNode, MenuSource} from './menuModel.js';
+import {openLocation} from './sources/desktopMenuSource.js';
 import {log, logError} from './util.js';
 
 // Large enough to always append after the existing left-box children.
@@ -18,7 +21,8 @@ const PANEL_POSITION = 1000;
 export interface FocusedApp {
     name: string;
     app: Shell.App | null;
-    window: Meta.Window;
+    /** Null while the desktop has focus. */
+    window: Meta.Window | null;
 }
 
 export class MenuBar {
@@ -120,7 +124,18 @@ export class MenuBar {
         const button = this._addButton(focused.name, 'global-menu-app-name');
         const menu = button.menu as PopupMenu.PopupMenu;
 
-        menu.addAction('Close Window', () => focused.window.delete(global.get_current_time()));
+        const window = focused.window;
+        if (!window) {
+            menu.addAction('New Window', () => {
+                if (focused.app)
+                    focused.app.open_new_window(-1);
+                else
+                    openLocation(Gio.File.new_for_path(GLib.get_home_dir()).get_uri());
+            });
+            return;
+        }
+
+        menu.addAction('Close Window', () => window.delete(global.get_current_time()));
         if (focused.app) {
             menu.addMenuItem(new PopupMenu.PopupSeparatorMenuItem());
             menu.addAction(`Quit ${focused.name}`, () => focused.app!.request_quit());

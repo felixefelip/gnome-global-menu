@@ -3,11 +3,13 @@ import Meta from 'gi://Meta';
 import Shell from 'gi://Shell';
 
 import {Extension} from 'resource:///org/gnome/shell/extensions/extension.js';
+import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 
 import {MenuBar} from './menuBar.js';
 import {MenuSource} from './menuModel.js';
 import {Registrar} from './registrar.js';
 import {DBusMenuSource} from './sources/dbusMenuSource.js';
+import {DesktopMenuSource, fileManagerApp} from './sources/desktopMenuSource.js';
 import {GtkMenuSource} from './sources/gtkMenuSource.js';
 
 /** Follows the focused window and shows its menu in the panel. */
@@ -15,6 +17,8 @@ export default class GlobalMenuExtension extends Extension {
     private _registrar: Registrar | null = null;
     private _menuBar: MenuBar | null = null;
     private _focusId = 0;
+    private _overviewId = 0;
+    private _workspaceId = 0;
     private _idleId = 0;
     private _window: Meta.Window | null = null;
     private _windowSignalIds: number[] = [];
@@ -25,12 +29,19 @@ export default class GlobalMenuExtension extends Extension {
         this._menuBar = new MenuBar();
 
         this._focusId = global.display.connect('notify::focus-window', () => this._queueUpdate());
+        // Focus may stay empty when these end, so check again whether the desktop is left.
+        this._overviewId = Main.overview.connect('hidden', () => this._queueUpdate());
+        this._workspaceId = global.workspace_manager.connect('active-workspace-changed', () => this._queueUpdate());
         this._queueUpdate();
     }
 
     override disable() {
         global.display.disconnect(this._focusId);
         this._focusId = 0;
+        Main.overview.disconnect(this._overviewId);
+        this._overviewId = 0;
+        global.workspace_manager.disconnect(this._workspaceId);
+        this._workspaceId = 0;
         if (this._idleId)
             GLib.source_remove(this._idleId);
         this._idleId = 0;
@@ -70,9 +81,17 @@ export default class GlobalMenuExtension extends Extension {
 
     private _update() {
         const window = global.display.focus_window;
-        // Focus moves away briefly (e.g. to the shell itself); keep the last menu.
-        if (!window || window.get_window_type() === Meta.WindowType.DESKTOP)
+        if (window?.get_window_type() === Meta.WindowType.DESKTOP) {
+            this._showDesktop();
             return;
+        }
+        if (!window) {
+            // The shell itself takes focus while a menu or the overview is open;
+            // keep the last menu then. Otherwise nothing has focus but the desktop.
+            if (Main.modalCount === 0 && !Main.overview.visible)
+                this._showDesktop();
+            return;
+        }
 
         this._trackWindow(window);
         const app = Shell.WindowTracker.get_default().get_window_app(window);
@@ -90,6 +109,17 @@ export default class GlobalMenuExtension extends Extension {
         } else {
             this._menuBar!.show(focused, found?.create() ?? null);
         }
+    }
+
+    /** Shows the file manager's menu, as macOS does with Finder. */
+    private _showDesktop() {
+        this._trackWindow(null);
+        const menuBar = this._menuBar!;
+        if (menuBar.source?.key === DesktopMenuSource.KEY && !menuBar.window)
+            return;
+
+        const app = fileManagerApp();
+        menuBar.show({name: app?.get_name() ?? 'Desktop', app, window: null}, new DesktopMenuSource());
     }
 
     /** Looks for a menu on the window itself, then on the windows it is transient for. */
