@@ -9,11 +9,21 @@ import {dbusCall, formatAccel, logError, stripMnemonic} from '../util.js';
 
 const IFACE = 'com.canonical.dbusmenu';
 const ROOT_ID = 0;
+// Electron apps (VS Code) ignore menu actions while none of their windows has
+// keyboard focus, which the Shell holds while its menu is open. The click is
+// sent this long after the menu closes, once the window has focus again.
+const CLICK_DELAY_MS = 100;
 
 interface RawItem {
     id: number;
     props: Record<string, GLib.Variant>;
     children: RawItem[];
+}
+
+interface ItemRef {
+    id: number;
+    /** Labels from the top-level menu down to the item. */
+    path: string[];
 }
 
 function parseItem(variant: GLib.Variant): RawItem {
@@ -37,13 +47,19 @@ function prop<T>(item: RawItem, name: string, fallback: T): T {
     return value ? value.recursiveUnpack() as T : fallback;
 }
 
-function toNode(item: RawItem): MenuNode {
+function labelOf(item: RawItem): string {
+    return stripMnemonic(prop<string>(item, 'label', ''));
+}
+
+function toNode(item: RawItem, parentPath: string[]): MenuNode {
+    const label = labelOf(item);
+    const path = [...parentPath, label];
     const toggleType = prop<string>(item, 'toggle-type', '');
     const shortcut = prop<string[][]>(item, 'shortcut', []);
 
     return {
         id: String(item.id),
-        label: stripMnemonic(prop<string>(item, 'label', '')),
+        label,
         separator: prop<string>(item, 'type', 'standard') === 'separator',
         enabled: prop<boolean>(item, 'enabled', true),
         visible: prop<boolean>(item, 'visible', true),
@@ -51,8 +67,8 @@ function toNode(item: RawItem): MenuNode {
         toggled: prop<number>(item, 'toggle-state', 0) === 1,
         accel: shortcut.length > 0 ? formatAccel(shortcut[0]) : null,
         hasSubmenu: prop<string>(item, 'children-display', '') === 'submenu' || item.children.length > 0,
-        children: item.children.map(toNode),
-        data: item.id,
+        children: item.children.map(child => toNode(child, path)),
+        data: {id: item.id, path} satisfies ItemRef,
     };
 }
 
@@ -62,6 +78,7 @@ export class DBusMenuSource implements MenuSource {
 
     private _bus = Gio.DBus.session;
     private _signalId: number;
+    private _clickTimeoutId = 0;
 
     static keyFor(name: string, path: string) {
         return `dbusmenu:${name}${path}`;
@@ -80,27 +97,63 @@ export class DBusMenuSource implements MenuSource {
 
     destroy() {
         this._bus.signal_unsubscribe(this._signalId);
+        if (this._clickTimeoutId)
+            GLib.source_remove(this._clickTimeoutId);
         this.onChanged = null;
     }
 
     async getTopLevel(): Promise<MenuNode[]> {
         await this._aboutToShow(ROOT_ID);
-        return (await this._getLayout(ROOT_ID)).children.map(toNode);
+        return (await this._getLayout(ROOT_ID)).children.map(child => toNode(child, []));
     }
 
     async openSubmenu(node: MenuNode): Promise<MenuNode[]> {
-        const id = node.data as number;
+        const {id, path} = node.data as ItemRef;
         this._event(id, 'opened');
         await this._aboutToShow(id);
-        return (await this._getLayout(id)).children.map(toNode);
+        return (await this._getLayout(id)).children.map(child => toNode(child, path));
     }
 
     closeSubmenu(node: MenuNode) {
-        this._event(node.data as number, 'closed');
+        this._event((node.data as ItemRef).id, 'closed');
     }
 
     activate(node: MenuNode) {
-        this._event(node.data as number, 'clicked');
+        const ref = node.data as ItemRef;
+        const timestamp = global.get_current_time();
+        if (this._clickTimeoutId)
+            GLib.source_remove(this._clickTimeoutId);
+        this._clickTimeoutId = GLib.timeout_add(GLib.PRIORITY_DEFAULT, CLICK_DELAY_MS, () => {
+            this._clickTimeoutId = 0;
+            this._click(ref, timestamp).catch(e => logError(e, `cannot activate ${ref.path.join(' > ')}`));
+            return GLib.SOURCE_REMOVE;
+        });
+    }
+
+    private async _click(ref: ItemRef, timestamp: number) {
+        try {
+            await this._sendEvent(ref.id, 'clicked', timestamp);
+            return;
+        } catch {
+            // Electron rebuilds its whole menu, with new ids, whenever the
+            // window gets focus back; find the item again by its labels.
+        }
+        const id = await this._findItem(ref.path);
+        if (id === null)
+            throw new Error('the item is no longer in the menu');
+        await this._sendEvent(id, 'clicked', timestamp);
+    }
+
+    private async _findItem(path: string[]): Promise<number | null> {
+        let id = ROOT_ID;
+        for (const label of path) {
+            await this._aboutToShow(id);
+            const child = (await this._getLayout(id)).children.find(item => labelOf(item) === label);
+            if (!child)
+                return null;
+            id = child.id;
+        }
+        return id;
     }
 
     private _call(method: string, params: GLib.Variant, replyType: string | null) {
@@ -122,8 +175,12 @@ export class DBusMenuSource implements MenuSource {
     }
 
     private _event(id: number, eventId: string) {
-        const params = new GLib.Variant('(isvu)',
-            [id, eventId, new GLib.Variant('i', 0), global.get_current_time()]);
-        this._call('Event', params, null).catch(e => logError(e, `Event ${eventId}`));
+        this._sendEvent(id, eventId, global.get_current_time())
+            .catch(e => logError(e, `Event ${eventId}`));
+    }
+
+    private _sendEvent(id: number, eventId: string, timestamp: number) {
+        const params = new GLib.Variant('(isvu)', [id, eventId, new GLib.Variant('i', 0), timestamp]);
+        return this._call('Event', params, null);
     }
 }
