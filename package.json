@@ -1,0 +1,19 @@
+{
+  "name": "gnome-global-menu",
+  "version": "0.1.0",
+  "description": "macOS-style global menu for GNOME Shell",
+  "scripts": {
+    "build": "tsc && cp metadata.json stylesheet.css build/",
+    "check": "tsc --noEmit",
+    "install-ext": "npm run build && D=~/.local/share/gnome-shell/extensions/gnome-global-menu@felipefelix && rm -rf $D && mkdir -p $D && cp -r build/. $D/",
+    "pack": "npm run build && gnome-extensions pack build --force --extra-source=menuModel.js --extra-source=menuBar.js --extra-source=registrar.js --extra-source=util.js --extra-source=sources",
+    "nested": "scripts/nested.sh"
+  },
+  "license": "GPL-2.0-or-later",
+  "type": "module",
+  "devDependencies": {
+    "@girs/gnome-shell": "^50.0.4",
+    "typescript": "^7.0.2"
+  },
+  "private": true
+}

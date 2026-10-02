@@ -1,0 +1,8 @@
+.global-menu-app-name {
+  font-weight: bold;
+}
+
+.global-menu-accel {
+  padding-left: 2em;
+  color: rgba(127, 127, 127, 1);
+}

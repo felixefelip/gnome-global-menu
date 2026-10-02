@@ -1,0 +1,8 @@
+{
+  "uuid": "gnome-global-menu@felipefelix",
+  "name": "Global Menu",
+  "description": "Shows the focused application's menu bar in the top panel, macOS style.",
+  "shell-version": ["50"],
+  "url": "",
+  "version-name": "0.1.0"
+}
