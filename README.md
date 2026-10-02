@@ -47,6 +47,40 @@ só procuram o Registrar ao iniciar.
 
 Logs: na sessão aninhada aparecem no terminal que rodou `npm run nested`; na sessão normal, use `journalctl -f -o cat /usr/bin/gnome-shell | grep global-menu`.
 
+### Chrome e VS Code em Wayland nativo
+
+No Wayland, o Chromium e o Electron só exportam o menu se o compositor tiver o
+protocolo `org_kde_kwin_appmenu`, que o Mutter não implementa. O fork
+[felixefelip/mutter](https://github.com/felixefelip/mutter) implementa esse
+protocolo e expõe o endereço do menu em `Meta.Window`
+(`dbus-appmenu-service-name` e `dbus-appmenu-object-path`). Sem o fork, a
+extensão funciona como antes.
+
+- `kde-appmenu`: o patch sobre o Mutter oficial do GNOME.
+- `kde-appmenu-ubuntu`: o mesmo patch sobre o Mutter do Ubuntu, que é o que
+  roda com o gnome-shell instalado.
+
+Como cada app usa o protocolo:
+
+- Chrome: manda o endereço pelo protocolo, janela por janela.
+- VS Code/Electron: só confere se o protocolo existe e depois registra o
+  menu no Registrar com um ID que não é de X11. A janela é encontrada pelo
+  PID, então com várias janelas abertas pode aparecer o menu da janela errada.
+
+Para testar na sessão aninhada sem instalar o fork (a versão do fork precisa
+ser a mesma do Mutter instalado):
+
+```sh
+git clone -b kde-appmenu-ubuntu https://github.com/felixefelip/mutter ~/workspaces/mutter
+sudo apt build-dep ~/workspaces/mutter
+cd ~/workspaces/mutter && meson setup build --prefix=/usr \
+    --libdir=lib/x86_64-linux-gnu -Dtests=disabled && ninja -C build
+cd - && MUTTER_BUILD=~/workspaces/mutter/build npm run nested -- \
+    google-chrome --ozone-platform=wayland
+```
+
+O comando depois de `--` é aberto dentro da sessão aninhada.
+
 ### Firefox
 
 Em `about:config`, ative `widget.gtk.global-menu.enabled`. Para o caminho via

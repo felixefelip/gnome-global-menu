@@ -8,9 +8,24 @@ import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 import {MenuBar} from './menuBar.js';
 import {MenuSource} from './menuModel.js';
 import {Registrar} from './registrar.js';
+import {log} from './util.js';
 import {DBusMenuSource} from './sources/dbusMenuSource.js';
 import {DesktopMenuSource, fileManagerApp} from './sources/desktopMenuSource.js';
 import {GtkMenuSource} from './sources/gtkMenuSource.js';
+
+/**
+ * Address of the window's DBusMenu menu, which Chromium sends over the
+ * org_kde_kwin_appmenu Wayland protocol. Only a patched Mutter exposes it.
+ */
+function dbusAppmenuOf(window: Meta.Window): {sender: string, path: string} | null {
+    const w = window as Meta.Window & {
+        get_dbus_appmenu_service_name?: () => string | null,
+        get_dbus_appmenu_object_path?: () => string | null,
+    };
+    const sender = w.get_dbus_appmenu_service_name?.();
+    const path = w.get_dbus_appmenu_object_path?.();
+    return sender && path ? {sender, path} : null;
+}
 
 /** Follows the focused window and shows its menu in the panel. */
 export default class GlobalMenuExtension extends Extension {
@@ -63,7 +78,7 @@ export default class GlobalMenuExtension extends Extension {
         });
     }
 
-    /** GTK apps may export their menu after the window gets focus. */
+    /** GTK and Chromium apps may export their menu after the window gets focus. */
     private _trackWindow(window: Meta.Window | null) {
         if (window === this._window)
             return;
@@ -74,6 +89,11 @@ export default class GlobalMenuExtension extends Extension {
         if (window) {
             this._windowSignalIds = [
                 window.connect('notify::gtk-menubar-object-path', () => this._queueUpdate()),
+                window.connect('notify::dbus-appmenu-object-path', () => {
+                    const appmenu = dbusAppmenuOf(window);
+                    log(`window "${window.get_title()}" announced menu ${appmenu?.sender}${appmenu?.path}`);
+                    this._queueUpdate();
+                }),
                 window.connect('unmanaged', () => this._trackWindow(null)),
             ];
         }
@@ -139,7 +159,7 @@ export default class GlobalMenuExtension extends Extension {
                 return {key: GtkMenuSource.keyFor(paths), create: () => new GtkMenuSource(paths, appName)};
             }
 
-            const registration = this._registrar!.lookup(w);
+            const registration = dbusAppmenuOf(w) ?? this._registrar!.lookup(w);
             if (registration) {
                 const {sender, path} = registration;
                 return {
